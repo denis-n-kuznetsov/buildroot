@@ -1,0 +1,129 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 17f3dcee..faa0cb81 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -65,6 +65,13 @@ endif ()
+ find_host_package (PythonInterp REQUIRED)
+ find_package (Threads)
+ 
++if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
++    find_package (procps)
++    if (procps_FOUND)
++        add_definitions (-DHAVE_READPROC_H)
++    endif ()
++endif ()
++
+ if (ENABLE_GUI)
+     if (NOT (ENABLE_GUI STREQUAL "AUTO"))
+         set (REQUIRE_GUI REQUIRED)
+@@ -222,11 +229,6 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
+         ERROR_QUIET
+         OUTPUT_STRIP_TRAILING_WHITESPACE
+     )
+-    CHECK_INCLUDE_FILES(proc/readproc.h READPROC_H_FOUND)
+-    if (READPROC_H_FOUND)
+-        add_definitions (-DHAVE_READPROC_H)
+-        find_library (proc_LIBRARY NAMES proc procps)
+-    endif ()
+ endif()
+ 
+ if (WIN32 OR APPLE)
+diff --git a/cmake/Findprocps.cmake b/cmake/Findprocps.cmake
+new file mode 100644
+index 00000000..dbf109b0
+--- /dev/null
++++ b/cmake/Findprocps.cmake
+@@ -0,0 +1,23 @@
++# - try to find procps directories and libraries
++#
++# Once done this will define:
++#
++#  procps_FOUND
++#  procps_INCLUDE_DIR
++#  procps_LIBRARY
++#
++
++include (FindPackageMessage)
++
++if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
++    find_path (procps_INCLUDE_DIR proc/readproc.h)
++    find_library (procps_LIBRARY NAMES proc procps)
++    if (procps_INCLUDE_DIR AND procps_LIBRARY)
++        set (procps_FOUND 1)
++        mark_as_advanced (procps_FOUND)
++        find_package_message (procps "Found procps" "[${procps_LIBRARY}][${procps_INCLUDE_DIR}]")
++    else ()
++        find_package_message (procps "procps not found" "[${procps_LIBRARY}][${procps_INCLUDE_DIR}]")
++    endif ()
++endif()
++
+diff --git a/retrace/CMakeLists.txt b/retrace/CMakeLists.txt
+index 7da9f2be..94ae37f9 100644
+--- a/retrace/CMakeLists.txt
++++ b/retrace/CMakeLists.txt
+@@ -40,7 +40,6 @@ add_library (retrace_common STATIC
+     retrace_swizzle.cpp
+     json.cpp
+ )
+-
+ target_link_libraries (retrace_common
+     image
+     common
+@@ -48,6 +47,9 @@ target_link_libraries (retrace_common
+     ${SNAPPY_LIBRARIES}
+     ${GETOPT_LIBRARIES}
+ )
++if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
++    target_link_libraries (retrace_common rt)
++endif ()
+ 
+ add_library (glretrace_common STATIC
+     glretrace_gl.cpp
+@@ -67,6 +69,9 @@ add_dependencies (glretrace_common glproc)
+ target_link_libraries (glretrace_common
+     retrace_common
+ )
++if (procps_FOUND)
++    target_link_libraries (glretrace_common ${procps_LIBRARY})
++endif ()
+ 
+ 
+ if (WIN32 OR APPLE OR X11_FOUND)
+@@ -101,14 +106,6 @@ if (WIN32 OR APPLE OR X11_FOUND)
+             ${CMAKE_THREAD_LIBS_INIT}
+             dl
+         )
+-
+-        if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
+-            target_link_libraries (glretrace rt)
+-            if (READPROC_H_FOUND)
+-                target_link_libraries (glretrace ${proc_LIBRARY})
+-            endif ()
+-        endif ()
+-
+     endif ()
+ 
+     install (TARGETS glretrace RUNTIME DESTINATION bin) 
+@@ -128,14 +125,6 @@ if (ENABLE_EGL AND NOT WIN32 AND NOT APPLE AND NOT ENABLE_WAFFLE)
+         ${CMAKE_THREAD_LIBS_INIT}
+         dl
+     )
+-
+-    if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
+-        target_link_libraries (eglretrace rt)
+-        if (READPROC_H_FOUND)
+-            target_link_libraries (eglretrace ${proc_LIBRARY})
+-        endif ()
+-    endif ()
+-
+     install (TARGETS eglretrace RUNTIME DESTINATION bin) 
+ endif ()
+ 
+@@ -156,7 +145,6 @@ if (ENABLE_EGL AND (ANDROID OR ENABLE_WAFFLE) AND Waffle_FOUND)
+         ${CMAKE_THREAD_LIBS_INIT}
+         dl
+     )
+-    target_link_libraries (eglretrace ${proc_LIBRARY})
+     install (TARGETS eglretrace RUNTIME DESTINATION bin)
+ endif ()
+ 
